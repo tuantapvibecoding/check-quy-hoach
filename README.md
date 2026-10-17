@@ -12,6 +12,10 @@ Bản demo app kiểm tra quy hoạch và thửa đất trên nền ảnh vệ t
 
 Mỗi lần có bản cập nhật, app tự tải bản mới; đóng hẳn rồi mở lại là dùng được.
 
+## Phiên bản
+
+Số phiên bản đang dùng hiện ở góc trên bên trái bảng điều khiển trong app. Mục **Phiên bản** (cuối bảng) có lịch sử cập nhật và nút **Kiểm tra cập nhật**; khi có bản mới, app hiện thanh **Cập nhật** ở đầu màn hình.
+
 ## Tính năng hiện có
 
 - Nhiều lớp dữ liệu, bật/tắt từng lớp, nền vệ tinh hoặc bản đồ đường.

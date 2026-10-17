@@ -37,6 +37,7 @@
 </div>
 
 <aside class="sheet card" id="sheet">
+  <span class="ver-pill" id="verPill" title="Phiên bản đang dùng">v–</span>
   <button class="sheet-grip" id="sheetGrip" aria-expanded="false" aria-controls="sheetBody">
     <span class="grip-bar" aria-hidden="true"></span>
     <span class="sheet-title" id="sheetTitle">Lớp dữ liệu</span>
@@ -116,14 +117,30 @@
       <p class="hint">Hệ VN-2000, kinh tuyến trục 108°30′, múi 3° (Gia Lai).</p>
     </section>
 
-    <p class="foot">Check Quy Hoạch · bản demo <span id="ver"></span></p>
+    <section class="section" id="verSec">
+      <h3>Phiên bản</h3>
+      <div class="ver-now">
+        <div><div class="ver-big" id="verNow">v–</div><div class="meta" id="verDate"></div></div>
+        <button class="btn" id="checkUpdate">Kiểm tra cập nhật</button>
+      </div>
+      <p class="hint" id="updStatus"></p>
+      <ol class="changelog" id="changelog"></ol>
+    </section>
+
+    <p class="foot">Check Quy Hoạch · bản demo</p>
   </div>
 </aside>
 
 <div class="scale" id="scale"><span id="scaleTxt">100 m</span><i id="scaleBar" style="width:80px"></i></div>
 <div class="attrib" id="attrib">Ảnh nền © Esri, Maxar, Earthstar Geographics</div>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="update-bar card" id="updateBar" role="alert" hidden>
+  <span class="ut"><b id="updateText">Có bản mới</b><small id="updateSub"></small></span>
+  <button class="btn primary" id="updateNow">Cập nhật</button>
+  <button class="icon-btn" id="updateLater" aria-label="Để sau">×</button>
+</div>
 
+<script src="js/version.js"></script>
 <script src="js/vn2000.js"></script>
 <script src="js/app.js"></script>
 </body>

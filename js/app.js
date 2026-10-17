@@ -1,7 +1,7 @@
 /* Check Quy Hoạch — map viewer for VN-2000 cadastral / planning layers (no external libraries). */
 (() => {
 'use strict';
-const APP_VERSION = '0.1.0';
+const APP_VERSION = self.APP_VERSION || '0.0.0';
 const TILE = 256, MAX_Z = 21.5, MIN_Z = 3, R_EARTH = 6378137;
 const BASEMAPS = {
   sat: { maxZ: 18, url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -547,8 +547,59 @@ function resize() {
 window.addEventListener('resize', resize);
 if (window.matchMedia) { const mq = matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener && mq.addEventListener('change', schedule); }
 
+// ---------- version & updates ----------
+let swReg = null, lastCheck = 0, latestSeen = null;
+const cmpVer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); return 0; };
+function renderVersion() {
+  $('verPill').textContent = 'v' + APP_VERSION;
+  $('verNow').textContent = 'v' + APP_VERSION;
+  $('verDate').textContent = 'Phát hành ' + (self.APP_BUILD_DATE || '').split('-').reverse().join('/');
+  $('changelog').innerHTML = (self.CHANGELOG || []).map(c => `
+    <li class="${c.v === APP_VERSION ? 'current' : ''}">
+      <div class="cv">v${esc(c.v)}${c.v === APP_VERSION ? ' · đang dùng' : ''}<span>${esc(c.d.split('-').reverse().join('/'))}</span></div>
+      <ul>${c.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+    </li>`).join('');
+}
+async function checkUpdate(manual = false) {
+  if (!manual && Date.now() - lastCheck < 5 * 60 * 1000) return;
+  lastCheck = Date.now();
+  if (manual) $('updStatus').textContent = 'Đang kiểm tra…';
+  try {
+    const txt = await (await fetch('js/version.js?t=' + Date.now(), { cache: 'no-store' })).text();
+    const m = txt.match(/APP_VERSION\s*=\s*'([\d.]+)'/);
+    if (!m) throw new Error('no version');
+    latestSeen = m[1];
+    if (cmpVer(latestSeen, APP_VERSION) > 0) {
+      $('updateText').textContent = `Có bản mới v${latestSeen}`;
+      $('updateSub').textContent = `Đang dùng v${APP_VERSION}`;
+      $('updateBar').hidden = false;
+      $('verPill').classList.add('new'); $('verPill').textContent = `v${APP_VERSION} ↑`;
+      $('updStatus').textContent = `Có bản mới v${latestSeen}. Bấm "Cập nhật" ở đầu màn hình.`;
+    } else if (manual) {
+      $('updStatus').textContent = `Bạn đang dùng bản mới nhất (v${APP_VERSION}).`;
+    }
+  } catch (e) {
+    if (manual) $('updStatus').textContent = 'Không kiểm tra được, cần có mạng.';
+  }
+}
+async function applyUpdate() {
+  $('updateNow').disabled = true; $('updateText').textContent = 'Đang cập nhật…'; $('updateSub').textContent = '';
+  try {
+    if (swReg) {
+      await swReg.update();
+      const w = swReg.waiting || swReg.installing;
+      if (w) w.postMessage('skipWaiting');
+    }
+  } catch (e) {}
+  setTimeout(() => location.reload(), 600);
+}
+$('checkUpdate').addEventListener('click', () => checkUpdate(true));
+$('updateNow').addEventListener('click', applyUpdate);
+$('updateLater').addEventListener('click', () => { $('updateBar').hidden = true; });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+
 async function boot() {
-  $('ver').textContent = 'v' + APP_VERSION;
+  renderVersion();
   resize();
   setSheet(window.innerWidth >= 760);
   const bm = store.get('basemap'); if (bm && BASEMAPS[bm]) setBasemap(bm);
@@ -563,17 +614,11 @@ async function boot() {
   renderLayerList();
   if (layers.length) selectLayer(layers[0].id, { fit: true });
   setTimeout(() => { if (tileErrors > 4 && !tileOk) toast('Không tải được ảnh nền · kiểm tra kết nối mạng', 4000); }, 7000);
+  setTimeout(() => checkUpdate(), 2500);
 }
 boot();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').then(reg => {
-    reg.addEventListener('updatefound', () => {
-      const nw = reg.installing;
-      nw && nw.addEventListener('statechange', () => {
-        if (nw.state === 'installed' && navigator.serviceWorker.controller) toast('Đã có bản cập nhật · mở lại app để dùng bản mới', 5000);
-      });
-    });
-  }).catch(() => {});
+  navigator.serviceWorker.register('sw.js').then(reg => { swReg = reg; }).catch(() => {});
 }
 })();

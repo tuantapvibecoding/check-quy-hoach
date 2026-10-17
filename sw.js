@@ -1,10 +1,11 @@
 /* Service worker: app shell + data cached for offline use; map tiles cached as you browse. */
-const VERSION = 'cqh-v0.1.0';
-const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/vn2000.js', 'manifest.webmanifest',
+const VERSION = 'cqh-v0.2.0';
+const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/vn2000.js', 'js/version.js', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'data/catalog.json', 'data/thua-115-68.json', 'data/trang-trai-chu-puh.json'];
 const TILE_CACHE = 'cqh-tiles-v1', TILE_LIMIT = 1500;
 
+self.addEventListener('message', e => { if (e.data === 'skipWaiting') self.skipWaiting(); });
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
@@ -28,8 +29,8 @@ self.addEventListener('fetch', e => {
     }).catch(() => fetch(e.request)));
     return;
   }
-  if (url.origin === location.origin) {                       // app files: network first, fall back to cache offline
-    e.respondWith(fetch(e.request).then(res => {
+  if (url.origin === location.origin) {                       // app files: network first (revalidated), cache when offline
+    e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
       return res;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
