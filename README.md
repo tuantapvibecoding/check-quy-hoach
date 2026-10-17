@@ -28,6 +28,12 @@ App dùng **Map Tiles API** của Google với key của riêng bạn (miễn ph
 
 Ảnh của Google không được lưu để dùng offline (điều khoản Google); khi mất mạng app dùng bản đồ offline riêng.
 
+## Bản đồ offline Gia Lai
+
+- Dữ liệu OpenStreetMap (© OpenStreetMap contributors, ODbL) cho tỉnh Gia Lai cũ, khoảng 19 MB, nằm ở `data/osm/`.
+- Do GitHub Actions dựng tự động (`.github/workflows/osm-gialai.yml`), làm mới ngày 2 hằng tháng; chạy tay ở tab **Actions** nếu cần.
+- Trong app: mục **Bản đồ offline Gia Lai** → **Tải bản đồ offline** để lưu cả tỉnh vào máy. Mất mạng thì app tự chuyển sang bản đồ này.
+
 ## Tính năng hiện có
 
 - Nhiều lớp dữ liệu, bật/tắt từng lớp, nền vệ tinh hoặc bản đồ đường.

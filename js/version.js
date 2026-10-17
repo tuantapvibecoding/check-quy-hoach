@@ -1,7 +1,13 @@
 /* Single source of truth for the app version. Bump with: python3 tools/bump_version.py <x.y.z> "<ghi chú>" */
-self.APP_VERSION = '0.4.0';
+self.APP_VERSION = '0.5.0';
 self.APP_BUILD_DATE = '2026-10-17';
 self.CHANGELOG = [
+  { v: '0.5.0', d: '2026-10-17', items: [
+    "Bản đồ offline toàn tỉnh Gia Lai cũ (OpenStreetMap, ~19 MB): đường, sông hồ, ranh giới, địa danh",
+    "Mất mạng thì tự chuyển sang bản đồ offline, có mạng lại thì quay về Google",
+    "Nút \"Tải bản đồ offline\" để lưu cả tỉnh vào máy",
+    "Dữ liệu OSM tự làm mới hằng tháng",
+  ] },
   { v: '0.4.0', d: '2026-10-17', items: [
     "Nền bản đồ Google (vệ tinh kèm tên đường, hoặc bản đồ đường) qua API chính thức",
     "Nhập Google Maps API key ngay trong app, key chỉ lưu trên máy",

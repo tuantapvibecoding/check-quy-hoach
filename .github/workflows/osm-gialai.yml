@@ -39,9 +39,8 @@ jobs:
           ls -lh gialai.osm.pbf gl-filtered.osm.pbf gialai.geojsonseq
 
       - name: Dựng các mảnh bản đồ cho app
-        env:
-          BUILD_DATE: ${{ github.run_started_at }}
         run: |
+          export BUILD_DATE=$(date -u +%Y-%m-%dT%H:%MZ)
           rm -rf data/osm && python3 tools/osm/build_osm.py gialai.geojsonseq data/osm
           du -sh data/osm
 

@@ -6,6 +6,8 @@ const TILE = 256, MAX_Z = 21.5, MIN_Z = 3, R_EARTH = 6378137;
 const BASEMAPS = {
   gsat: { google: 'satellite', maxZ: 21, url: null, fg: '#f6f3ea', halo: 'rgba(0,0,0,.85)', text: '#ffffff', name: 'Google vệ tinh' },
   groad: { google: 'roadmap', maxZ: 21, url: null, fg: '#23302a', halo: 'rgba(255,255,255,.9)', text: '#1b2420', name: 'Google bản đồ' },
+  osm: { offline: true, name: 'Offline (OSM)', fg: '#23302a', halo: 'rgba(255,255,255,.92)', text: '#1b2420', bg: '#eef0e6',
+         attrib: 'Bản đồ offline © OpenStreetMap contributors' },
   sat: { maxZ: 18, name: 'Esri vệ tinh', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
          labels: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
          fg: '#f6f3ea', halo: 'rgba(0,0,0,.85)', text: '#ffffff', attrib: 'Ảnh nền © Esri, Maxar, Earthstar Geographics' },
@@ -160,12 +162,14 @@ function render() {
     const [wx, wy] = gpsDrawPos(), ins = sheetInset(), sc = scale();
     view.x = wx + (ins.right / 2) / sc; view.y = wy + ((ins.bottom - ins.top) / 2) / sc;
   }
-  const bm = BASEMAPS[basemap];
+  const eb = effectiveBasemap(), bm = BASEMAPS[eb];
+  document.body.classList.toggle('light-map', !!bm.offline || eb === 'groad' || eb === 'street');
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (bm.google && mapReady) googleAttribution();
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#ddd';
+  ctx.fillStyle = bm.bg || getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#ddd';
   ctx.fillRect(0, 0, W, H);
-  if (bm.url && mapReady) drawTileLayer(bm.url, bm.maxZ);
+  if (bm.offline) drawOsm();
+  else if (bm.url && mapReady) drawTileLayer(bm.url, bm.maxZ);
 
   const mats = new Map();
   for (const L of layers) {
@@ -199,6 +203,7 @@ function render() {
   }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (bm.labels && mapReady && view.z < 17.5) drawTileLayer(bm.labels, 18);
+  if (bm.offline) drawOsmLabels();
   if (show.text) drawLabels(mats, bm);
   if (moveMode) { const L = layerById(activeId); if (L && mats.get(L.id)) { const [cx, cy] = apply(mats.get(L.id), 0, 0); drawCross(cx, cy); } }
   if (gps) drawGps();
@@ -536,6 +541,142 @@ $('layerList').addEventListener('click', e => {
 $('opacity').addEventListener('input', e => { opacity = e.target.value / 100; $('opacityOut').textContent = e.target.value + '%'; schedule(); });
 [['lyFill', 'fill'], ['lyLine', 'line'], ['lyTree', 'tree'], ['lyText', 'text']].forEach(([id, k]) =>
   $(id).addEventListener('change', e => { show[k] = e.target.checked; schedule(); }));
+// ---------- offline basemap: OpenStreetMap Gia Lai (data/osm, built by GitHub Actions) ----------
+const OSM = { index: null, overview: null, chunks: new Map(), loading: new Set(), failed: false };
+const OSM_STYLE = {          // class: [colour, width px, min zoom, casing colour]
+  wa: ['#a8cbe6', 0, 9], w2: ['#9cc3e4', 1, 13], w1: ['#6fa6d6', 2.2, 8],
+  b8: ['#b9a6db', 1, 12.5, null, [2, 3]], b6: ['#9b85c4', 1.2, 9.5, null, [7, 4]],
+  r4: ['#b8a47e', 1, 14.5, null, [4, 3]], r3: ['#ffffff', 2.2, 13, '#c9c6bb'],
+  r2: ['#fbe38f', 3, 10, '#d9b85a'], r1: ['#f7c56a', 3.6, 8, '#cc9a3c'], r0: ['#f29d4b', 4.4, 6, '#c26f22'],
+};
+const OSM_ORDER = ['wa', 'w2', 'w1', 'b8', 'b6', 'r4', 'r3', 'r2', 'r1', 'r0'];
+function buildOsmChunk(j) {
+  const ch = { pos: { lat: j.lat, lon: j.lon, rot: 0 }, paths: {}, places: [] };
+  for (const f of j.f) {
+    if (f.k === 'p') { ch.places.push(f); continue; }
+    const p = ch.paths[f.k] || (ch.paths[f.k] = new Path2D()), c = f.c;
+    p.moveTo(c[0], c[1]); for (let i = 2; i < c.length; i += 2) p.lineTo(c[i], c[i + 1]);
+    if (f.k === 'wa') p.closePath();
+  }
+  return ch;
+}
+async function osmFetch(file) { const r = await fetch('data/osm/' + file); if (!r.ok) throw new Error(r.status); return r.json(); }
+async function osmInit() {
+  try {
+    OSM.index = await osmFetch('index.json');
+    OSM.overview = buildOsmChunk(await osmFetch(OSM.index.overview));
+    OSM.files = new Set(OSM.index.chunks.map(c => c.f));
+    renderOfflineState(); schedule();
+  } catch (e) { OSM.failed = true; renderOfflineState(); }
+}
+function visibleOsmChunks() {
+  const I = OSM.index; if (!I) return [];
+  const [la1, lo1] = unproject(...toWorld(0, H)), [la2, lo2] = unproject(...toWorld(W, 0));
+  const d = I.chunk_deg, [ba, bb] = I.bbox;
+  const out = [];
+  for (let i = Math.floor((lo1 - ba) / d); i <= Math.floor((lo2 - ba) / d); i++)
+    for (let j = Math.floor((la1 - bb) / d); j <= Math.floor((la2 - bb) / d); j++) {
+      const f = `c_${i}_${j}.json`; if (OSM.files.has(f)) out.push(f);
+    }
+  return out.length > 40 ? [] : out;
+}
+function osmChunksInView() {
+  if (!OSM.overview) return [];
+  if (view.z < 11.5) return [OSM.overview];
+  const res = [];
+  for (const f of visibleOsmChunks()) {
+    const c = OSM.chunks.get(f);
+    if (c) res.push(c);
+    else if (!OSM.loading.has(f)) {
+      OSM.loading.add(f);
+      osmFetch(f).then(j => { OSM.chunks.set(f, buildOsmChunk(j)); }).catch(() => {}).finally(() => { OSM.loading.delete(f); schedule(); });
+    }
+  }
+  return res.length ? res : [OSM.overview];
+}
+function drawOsm() {
+  const list = osmChunksInView();
+  if (!list.length) { drawOsmEmpty(); return; }
+  for (const pass of ['casing', 'fill']) for (const ch of list) {
+    const m = layerMatrix(ch); const px = 1 / m.k;
+    ctx.save(); ctx.setTransform(m.a * DPR, m.b * DPR, m.c * DPR, m.d * DPR, m.e * DPR, m.f * DPR);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const k of OSM_ORDER) {
+      const p = ch.paths[k], st = OSM_STYLE[k]; if (!p || view.z < st[2]) continue;
+      const grow = Math.max(0.6, Math.min(1.6, (view.z - 11) / 5));
+      if (k === 'wa') { if (pass === 'fill') { ctx.fillStyle = st[0]; ctx.fill(p); } continue; }
+      if (pass === 'casing') {
+        if (!st[3] || view.z < 12) continue;
+        ctx.strokeStyle = st[3]; ctx.lineWidth = (st[1] * grow + 1.6) * px; ctx.setLineDash([]); ctx.stroke(p);
+      } else {
+        ctx.strokeStyle = st[0]; ctx.lineWidth = st[1] * grow * px;
+        ctx.setLineDash(st[4] ? st[4].map(v => v * px) : []); ctx.stroke(p);
+      }
+    }
+    ctx.restore();
+  }
+}
+function drawOsmLabels() {
+  const list = osmChunksInView(); if (!list.length) return;
+  const minRank = view.z < 9 ? 0 : view.z < 11 ? 1 : view.z < 13 ? 2 : view.z < 15 ? 3 : 4;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  const placed = [];
+  for (const ch of list) {
+    const m = layerMatrix(ch);
+    for (const p of ch.places) {
+      if (p.r > minRank) continue;
+      const [sx, sy] = apply(m, p.c[0], p.c[1]);
+      if (sx < -60 || sy < -20 || sx > W + 60 || sy > H + 20) continue;
+      const size = [16, 14, 12.5, 11.5, 11][p.r] || 11;
+      ctx.font = `${p.r <= 1 ? 600 : 500} ${size}px "Be Vietnam Pro", system-ui, sans-serif`;
+      const w = ctx.measureText(p.n).width, b = [sx - w / 2 - 3, sy - size / 2 - 2, sx + w / 2 + 3, sy + size / 2 + 2];
+      if (placed.some(q => !(b[2] < q[0] || b[0] > q[2] || b[3] < q[1] || b[1] > q[3]))) continue;
+      placed.push(b);
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.92)'; ctx.strokeText(p.n, sx, sy);
+      ctx.fillStyle = '#3a3f37'; ctx.fillText(p.n, sx, sy);
+    }
+  }
+}
+function drawOsmEmpty() {
+  ctx.fillStyle = '#7b8279'; ctx.font = '500 13px "Be Vietnam Pro", system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(OSM.failed ? 'Chưa có bản đồ offline trên máy này' : 'Đang mở bản đồ offline…', W / 2, H / 2 - 120);
+}
+let netOnline = navigator.onLine;
+function effectiveBasemap() {             // no network: fall back to the offline map automatically
+  return (!netOnline && !BASEMAPS[basemap].offline) ? 'osm' : basemap;
+}
+window.addEventListener('offline', () => { netOnline = false; toast('Mất mạng · đang dùng bản đồ offline', 3000); $('attrib').textContent = BASEMAPS.osm.attrib; schedule(); });
+window.addEventListener('online', () => { netOnline = true; toast('Có mạng trở lại', 2000); setBasemap(basemap, true); });
+
+// download every chunk once so the whole province works without network (service worker keeps them)
+async function downloadOffline() {
+  const I = OSM.index; if (!I) { toast('Chưa tải được danh mục bản đồ offline'); return; }
+  const btn = $('osmDl'); btn.disabled = true;
+  let done = 0, bytes = 0;
+  const files = I.chunks, total = I.total_bytes;
+  const step = async f => {
+    try { const r = await fetch('data/osm/' + f.f); if (r.ok) { await r.arrayBuffer(); bytes += f.bytes; } } catch (e) {}
+    done++; $('osmProg').value = done / files.length;
+    $('osmStatus').textContent = `Đang tải ${done}/${files.length} mảnh · ${(bytes / 1e6).toFixed(1)}/${(total / 1e6).toFixed(1)} MB`;
+  };
+  const queue = files.slice();
+  await Promise.all(Array.from({ length: 4 }, async () => { while (queue.length) await step(queue.shift()); }));
+  store.set('osm-downloaded', { built: I.built, at: Date.now() });
+  btn.disabled = false; renderOfflineState();
+  toast('Đã tải xong bản đồ offline Gia Lai', 3000);
+}
+function renderOfflineState() {
+  const I = OSM.index, d = store.get('osm-downloaded');
+  $('osmProg').hidden = true;
+  if (!I) { $('osmStatus').textContent = OSM.failed ? 'Bản đồ offline chưa sẵn sàng trên máy chủ.' : 'Đang kiểm tra…'; $('osmDl').hidden = true; return; }
+  $('osmDl').hidden = false;
+  const size = (I.total_bytes / 1e6).toFixed(1) + ' MB';
+  const fresh = d && d.built === I.built;
+  $('osmStatus').textContent = fresh ? `Đã có trên máy (${size}) · dùng được khi mất mạng.` : `Dung lượng khoảng ${size}. Nên tải khi có Wi-Fi.`;
+  $('osmDl').textContent = fresh ? 'Tải lại' : 'Tải bản đồ offline';
+}
+$('osmDl').addEventListener('click', () => { $('osmProg').hidden = false; $('osmProg').value = 0; downloadOffline(); });
+
 // ---------- basemaps (Google Map Tiles API with the user's own key; Esri as fallback) ----------
 const GKEY = 'gmaps-key', GSESS = 'gmaps-session:';
 const googleKey = () => store.get(GKEY) || '';
@@ -589,6 +730,7 @@ async function setBasemap(b, quiet = false) {
   } else {
     $('attrib').textContent = bm.attrib;
   }
+  if (!netOnline && !bm.offline) $('attrib').textContent = BASEMAPS.osm.attrib;
   basemap = b; store.set('basemap', b);
   document.querySelectorAll('#bmSeg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.bm === b)));
   schedule();
@@ -761,6 +903,7 @@ async function boot() {
   resize();
   setSheet(window.innerWidth >= 760);
   renderKeyState();
+  osmInit();
   const bm = store.get('basemap'); setBasemap(bm && BASEMAPS[bm] ? bm : 'gsat', true);
   try {
     const cat = await (await fetch('data/catalog.json', { cache: 'no-cache' })).json();
@@ -773,7 +916,7 @@ async function boot() {
   renderLayerList();
   if (layers.length) selectLayer(layers[0].id, { fit: true });
   mapReady = true; schedule();
-  setTimeout(() => { if (tileErrors > 4 && !tileOk) toast('Không tải được ảnh nền · kiểm tra kết nối mạng', 4000); }, 7000);
+  setTimeout(() => { if (!BASEMAPS[effectiveBasemap()].offline && tileErrors > 4 && !tileOk) toast('Không tải được ảnh nền · kiểm tra kết nối mạng', 4000); }, 7000);
   setTimeout(() => checkUpdate(), 2500);
 }
 boot();

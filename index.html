@@ -94,10 +94,11 @@
 
     <section class="section">
       <h3>Hiển thị</h3>
-      <div class="seg seg3" id="bmSeg" role="group" aria-label="Ảnh nền">
-        <button data-bm="gsat" aria-pressed="false">Google<br>vệ tinh</button>
-        <button data-bm="groad" aria-pressed="false">Google<br>bản đồ</button>
-        <button data-bm="sat" aria-pressed="false">Esri<br>vệ tinh</button>
+      <div class="seg seg4" id="bmSeg" role="group" aria-label="Ảnh nền">
+        <button data-bm="gsat" aria-pressed="false">Google vệ tinh</button>
+        <button data-bm="groad" aria-pressed="false">Google bản đồ</button>
+        <button data-bm="sat" aria-pressed="false">Esri vệ tinh</button>
+        <button data-bm="osm" aria-pressed="false">Offline (OSM)</button>
       </div>
       <div class="checks">
         <label><input type="checkbox" id="lyFill" checked> Mảng màu</label>
@@ -110,6 +111,14 @@
         <input type="range" id="opacity" min="10" max="100" value="85">
         <output id="opacityOut" class="meta">85%</output>
       </div>
+    </section>
+
+    <section class="section" id="osmSec">
+      <h3>Bản đồ offline Gia Lai</h3>
+      <p class="hint">Đường, sông hồ, ranh giới và địa danh toàn tỉnh Gia Lai cũ từ OpenStreetMap. Khi mất mạng, app tự chuyển sang bản đồ này; thửa đất và GPS vẫn hoạt động.</p>
+      <div class="btn-row"><button class="btn primary" id="osmDl" hidden>Tải bản đồ offline</button></div>
+      <progress id="osmProg" max="1" value="0" hidden></progress>
+      <p class="hint" id="osmStatus">Đang kiểm tra…</p>
     </section>
 
     <section class="section" id="gSec">
