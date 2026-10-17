@@ -1,0 +1,55 @@
+name: Bản đồ offline Gia Lai (OpenStreetMap)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['tools/osm/**', '.github/workflows/osm-gialai.yml']
+  schedule:
+    - cron: '0 20 1 * *'   # làm mới dữ liệu ngày 2 hằng tháng (03:00 giờ VN)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: osm-gialai
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài osmium
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+
+      - name: Tải dữ liệu OSM Việt Nam (Geofabrik)
+        run: curl -fsSL -o vietnam.osm.pbf https://download.geofabrik.de/asia/vietnam-latest.osm.pbf && ls -lh vietnam.osm.pbf
+
+      - name: Cắt vùng Gia Lai cũ và xuất GeoJSON
+        run: |
+          osmium extract -b 107.40,12.90,108.95,14.65 --strategy=smart vietnam.osm.pbf -o gialai.osm.pbf --overwrite
+          osmium tags-filter gialai.osm.pbf \
+            nw/highway w/waterway nwr/natural=water nwr/landuse=reservoir,basin nwr/water \
+            r/boundary=administrative n/place -o gl-filtered.osm.pbf --overwrite
+          osmium export gl-filtered.osm.pbf -f geojsonseq -o gialai.geojsonseq --overwrite \
+            --geometry-types=point,linestring,polygon -a type
+          ls -lh gialai.osm.pbf gl-filtered.osm.pbf gialai.geojsonseq
+
+      - name: Dựng các mảnh bản đồ cho app
+        env:
+          BUILD_DATE: ${{ github.run_started_at }}
+        run: |
+          rm -rf data/osm && python3 tools/osm/build_osm.py gialai.geojsonseq data/osm
+          du -sh data/osm
+
+      - name: Đưa vào repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/osm
+          if git diff --cached --quiet; then echo "Không có thay đổi"; exit 0; fi
+          git commit -m "Cập nhật bản đồ offline Gia Lai (OpenStreetMap)"
+          git push
