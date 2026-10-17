@@ -1,7 +1,13 @@
 /* Single source of truth for the app version. Bump with: python3 tools/bump_version.py <x.y.z> "<ghi chú>" */
-self.APP_VERSION = '0.2.0';
+self.APP_VERSION = '0.3.0';
 self.APP_BUILD_DATE = '2026-10-17';
 self.CHANGELOG = [
+  { v: '0.3.0', d: '2026-10-17', items: [
+    "Chấm GPS di chuyển mượt theo thời gian thực, bản đồ tự bám theo bạn",
+    "Hiện hướng nhìn (la bàn) và hướng di chuyển",
+    "Báo khi bạn bước vào / ra khỏi một thửa đất, kèm tọa độ VN-2000 trực tiếp",
+    "Giữ màn hình sáng khi đang bám vị trí",
+  ] },
   { v: '0.2.0', d: '2026-10-17', items: [
     'Hiện số phiên bản đang dùng ở góc bảng điều khiển',
     'Mục "Phiên bản" có lịch sử cập nhật và nút kiểm tra bản mới',

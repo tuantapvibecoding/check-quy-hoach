@@ -20,7 +20,8 @@ let activeId = null, selectedParcelLayer = null;
 let basemap = 'sat', opacity = 0.85, moveMode = false, tapPoint = null;
 const show = { fill: true, line: true, tree: true, text: true };
 const view = { x: 0, y: 0, z: 15 };
-let gps = null, gpsWatch = null;
+let gps = null, gpsWatch = null, gpsMode = 'off', compassHeading = null, wakeLock = null, gpsInside = undefined;
+const gpsAnim = { from: [0, 0], to: [0, 0], t0: 0, dur: 1 };
 
 // ---------- helpers ----------
 const fmt = (v, d) => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }).replace(/,/g, ' ').replace('.', ',');
@@ -152,6 +153,10 @@ let raf = 0;
 function schedule() { if (!raf) raf = requestAnimationFrame(render); }
 function render() {
   raf = 0;
+  if (gps && gpsMode === 'follow') {        // keep the live dot in view while following
+    const [wx, wy] = gpsDrawPos(), ins = sheetInset(), sc = scale();
+    view.x = wx + (ins.right / 2) / sc; view.y = wy + ((ins.bottom - ins.top) / 2) / sc;
+  }
   const bm = BASEMAPS[basemap];
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#ddd';
@@ -241,12 +246,33 @@ function drawPin(x, y) {
   ctx.beginPath(); ctx.arc(x, y - 16, 7, Math.PI, 0); ctx.lineTo(x, y); ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y - 16, 2.6, 0, Math.PI * 2); ctx.fill();
 }
+function gpsDrawPos() {                    // smoothly glide the dot between GPS fixes
+  const a = gpsAnim, t = Math.min(1, (performance.now() - a.t0) / a.dur);
+  const e = t < 1 ? 1 - Math.pow(1 - t, 3) : 1;
+  if (t < 1) schedule();
+  return [a.from[0] + (a.to[0] - a.from[0]) * e, a.from[1] + (a.to[1] - a.from[1]) * e];
+}
 function drawGps() {
-  const [sx, sy] = toScreen(...project(gps.lat, gps.lon));
-  const r = Math.max(8, gps.acc * pxPerMeterWorld(gps.lat) * scale());
-  ctx.globalAlpha = 0.18; ctx.fillStyle = '#2f7cf6'; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
-  ctx.globalAlpha = 1; ctx.fillStyle = '#2f7cf6'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  const [sx, sy] = toScreen(...gpsDrawPos());
+  const r = Math.max(9, gps.acc * pxPerMeterWorld(gps.lat) * scale());
+  ctx.globalAlpha = 0.16; ctx.fillStyle = '#2f7cf6'; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.5; ctx.strokeStyle = '#2f7cf6'; ctx.lineWidth = 1; ctx.stroke();
+  const hd = compassHeading != null ? compassHeading : (gps.heading != null && gps.speed > 0.6 ? gps.heading : null);
+  if (hd != null) {                        // direction cone: compass when available, else GPS course while moving
+    const a = (hd - 90) * Math.PI / 180, spread = 0.5;
+    const g = ctx.createRadialGradient(sx, sy, 4, sx, sy, 46);
+    g.addColorStop(0, 'rgba(47,124,246,0.55)'); g.addColorStop(1, 'rgba(47,124,246,0)');
+    ctx.globalAlpha = 1; ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.arc(sx, sy, 46, a - spread, a + spread); ctx.closePath(); ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(sx, sy, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2f7cf6'; ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.fill();
+  const pulse = (performance.now() % 2000) / 2000;          // gentle "live" pulse
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    ctx.globalAlpha = 0.35 * (1 - pulse); ctx.strokeStyle = '#2f7cf6'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx, sy, 10 + pulse * 14, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1; schedule();
+  }
 }
 function updateScale() {
   const lat = unproject(view.x, view.y)[0];
@@ -409,7 +435,7 @@ canvas.addEventListener('pointermove', e => {
   const pts = [...pointers.values()], L = layerById(activeId), canMove = moveMode && L && !L.georef;
   if (pts.length === 1 && gesture.n === 1) {
     const dx = pts[0][0] - gesture.p0[0], dy = pts[0][1] - gesture.p0[1];
-    if (Math.hypot(dx, dy) > 4) gesture.moved = true;
+    if (Math.hypot(dx, dy) > 4) { gesture.moved = true; if (gpsMode === 'follow' && !canMove) setGpsMode('free'); }
     const s = scale();
     if (canMove) { [L.pos.lat, L.pos.lon] = unproject(gesture.plan0[0] + dx / s, gesture.plan0[1] + dy / s); }
     else { view.x = gesture.view0[0] - dx / s; view.y = gesture.view0[1] - dy / s; }
@@ -515,22 +541,81 @@ $('bmSat').addEventListener('click', () => setBasemap('sat'));
 $('bmStreet').addEventListener('click', () => setBasemap('street'));
 $('zoomIn').addEventListener('click', () => zoomAt(W / 2, H / 2, 1));
 $('zoomOut').addEventListener('click', () => zoomAt(W / 2, H / 2, -1));
-$('locate').addEventListener('click', () => {
-  if (gpsWatch !== null) {
-    navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; gps = null; $('locate').classList.remove('on'); schedule(); return;
+// ---------- live GPS: off -> follow (map tracks you) -> free (you panned away) ----------
+function setGpsMode(m) {
+  gpsMode = m;
+  const b = $('locate');
+  b.classList.toggle('on', m !== 'off'); b.classList.toggle('follow', m === 'follow');
+  b.setAttribute('aria-label', m === 'follow' ? 'Đang bám theo vị trí · chạm để tắt' : m === 'free' ? 'Về vị trí của tôi' : 'Vị trí của tôi');
+  $('gpsBar').hidden = m === 'off';
+  if (m === 'follow') requestWake(); else releaseWake();
+  schedule();
+}
+async function requestWake() { try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) {} }
+function releaseWake() { try { wakeLock && wakeLock.release(); } catch (e) {} wakeLock = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && gpsMode === 'follow') requestWake(); });
+function onCompass(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;            // iOS: degrees from north
+  else if (e.absolute && typeof e.alpha === 'number') h = (360 - e.alpha) % 360;
+  if (h != null) { compassHeading = h; if (gpsMode !== 'off') schedule(); }
+}
+async function startCompass() {
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      if (await DeviceOrientationEvent.requestPermission() !== 'granted') return;
+    }
+    window.addEventListener('deviceorientationabsolute', onCompass);
+    window.addEventListener('deviceorientation', onCompass);
+  } catch (e) {}
+}
+function stopGps() {
+  if (gpsWatch !== null) navigator.geolocation.clearWatch(gpsWatch);
+  gpsWatch = null; gps = null; gpsInside = undefined; compassHeading = null;
+  window.removeEventListener('deviceorientationabsolute', onCompass); window.removeEventListener('deviceorientation', onCompass);
+  setGpsMode('off');
+}
+function parcelAt(lat, lon) {
+  const [wx, wy] = project(lat, lon);
+  for (const L of layers) {
+    if (!L.visible || !L.data.parcel) continue;
+    const [sx, sy] = toScreen(wx, wy);
+    const [lx, ly] = screenToLocal(layerMatrix(L), sx, sy);
+    if (pointInRing(lx, ly, L.data.parcel.local)) return L;
   }
+  return null;
+}
+function onFix(p) {
+  const c = p.coords, first = !gps;
+  gps = { lat: c.latitude, lon: c.longitude, acc: c.accuracy || 20, heading: c.heading, speed: c.speed || 0, t: p.timestamp };
+  const to = project(gps.lat, gps.lon);
+  gpsAnim.from = first ? to : gpsDrawPos(); gpsAnim.to = to; gpsAnim.t0 = performance.now(); gpsAnim.dur = first ? 1 : 900;
+  if (first) { view.z = Math.max(view.z, 18); toast(`Đã định vị · sai số khoảng ${Math.round(gps.acc)} m`); }
+  const L = parcelAt(gps.lat, gps.lon), id = L ? L.id : null;
+  if (id !== gpsInside) {
+    if (gpsInside !== undefined || id) toast(L ? `Bạn đang đứng trong: ${L.meta.title}` : 'Bạn đã ra ngoài các thửa đã tải', 3000);
+    gpsInside = id;
+    if (L) selectLayer(L.id, { parcel: true });
+  }
+  const vn = VN2000.wgsToVn2000(gps.lat, gps.lon);
+  $('gpsAcc').textContent = `±${Math.round(gps.acc)} m` + (gps.speed > 0.6 ? ` · ${(gps.speed * 3.6).toFixed(0)} km/h` : '');
+  $('gpsWhere').textContent = L ? `Trong thửa: ${L.meta.title}` : 'Ngoài các thửa đã tải';
+  $('gpsXY').textContent = `X ${fmt(vn.X, 1)} · Y ${fmt(vn.Y, 1)}`;
+  schedule();
+}
+$('locate').addEventListener('click', () => {
+  if (gpsMode === 'follow') { stopGps(); toast('Đã tắt định vị'); return; }
+  if (gpsMode === 'free') { setGpsMode('follow'); return; }
   if (!('geolocation' in navigator)) { toast('Thiết bị không hỗ trợ định vị'); return; }
-  let first = true;
-  $('locate').classList.add('on'); toast('Đang lấy vị trí…');
-  gpsWatch = navigator.geolocation.watchPosition(p => {
-    gps = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy || 20 };
-    if (first) { first = false; flyTo(...project(gps.lat, gps.lon), Math.max(view.z, 17)); writeTap(gps.lat, gps.lon); toast(`Độ chính xác khoảng ${Math.round(gps.acc)} m`); }
-    schedule();
-  }, err => {
-    toast(err.code === 1 ? 'Chưa cho phép truy cập vị trí. Bật trong Cài đặt › Safari › Vị trí.' : 'Không lấy được vị trí, thử lại ngoài trời.', 4000);
-    $('locate').classList.remove('on'); gpsWatch = null;
-  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  startCompass();                                    // must be called inside the tap on iOS
+  setGpsMode('follow'); toast('Đang lấy vị trí…');
+  $('gpsAcc').textContent = 'Đang tìm…'; $('gpsWhere').textContent = ''; $('gpsXY').textContent = '';
+  gpsWatch = navigator.geolocation.watchPosition(onFix, err => {
+    toast(err.code === 1 ? 'Chưa cho phép vị trí: Cài đặt › Quyền riêng tư › Dịch vụ định vị › Safari › Khi dùng ứng dụng.' : 'Không lấy được vị trí, thử ra chỗ thoáng.', 4500);
+    if (err.code === 1 || !gps) stopGps();
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
 });
+$('gpsBar').addEventListener('click', () => { if (gpsMode === 'free') setGpsMode('follow'); });
 $('searchForm').addEventListener('submit', e => { e.preventDefault(); const h = $('results')._hits; if (h && h.length) openHit(h[0]); });
 $('q').addEventListener('input', e => { $('clearQ').hidden = !e.target.value; runSearch(e.target.value); });
 $('q').addEventListener('focus', e => { if (e.target.value) runSearch(e.target.value); });
