@@ -16,6 +16,18 @@ Mỗi lần có bản cập nhật, app tự tải bản mới; đóng hẳn r�
 
 Số phiên bản đang dùng hiện ở góc trên bên trái bảng điều khiển trong app. Mục **Phiên bản** (cuối bảng) có lịch sử cập nhật và nút **Kiểm tra cập nhật**; khi có bản mới, app hiện thanh **Cập nhật** ở đầu màn hình.
 
+## Bật bản đồ Google
+
+App dùng **Map Tiles API** của Google với key của riêng bạn (miễn phí 100 000 ô ảnh mỗi tháng). Key nhập trong app, mục **Bản đồ Google**, chỉ lưu trên máy, không có trong repo.
+
+1. Vào https://console.cloud.google.com → tạo project → gắn tài khoản thanh toán (Billing).
+2. **APIs & Services → Library** → bật **Map Tiles API**.
+3. **APIs & Services → Credentials → Create credentials → API key**.
+4. Sửa key: *Application restrictions* = **Websites**, thêm `https://tuantapvibecoding.github.io/*`; *API restrictions* = **Map Tiles API**.
+5. Dán key vào app → **Lưu**.
+
+Ảnh của Google không được lưu để dùng offline (điều khoản Google); khi mất mạng app dùng bản đồ offline riêng.
+
 ## Tính năng hiện có
 
 - Nhiều lớp dữ liệu, bật/tắt từng lớp, nền vệ tinh hoặc bản đồ đường.

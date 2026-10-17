@@ -102,6 +102,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 
 .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--panel-2); border-radius: 10px; padding: 3px; gap: 3px; }
 .seg button { border: 0; background: transparent; color: var(--ink); font: 500 13.5px var(--font-ui); padding: 8px; border-radius: 8px; cursor: pointer; }
+.seg3 { grid-template-columns: repeat(3, 1fr); }
+.seg3 button { font-size: 12.5px; line-height: 1.25; padding: 7px 4px; }
+.key-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
 .seg button[aria-pressed="true"] { background: var(--panel); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
 .checks label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
@@ -135,7 +138,7 @@ table.vt th:first-child, table.vt td:first-child { text-align: center; }
 
 .toast { position: fixed; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 104px); max-width: calc(100vw - 32px);
   background: var(--ink); color: var(--panel); padding: 8px 14px; border-radius: 999px; font-size: 13.5px; font-weight: 500; pointer-events: none; box-shadow: var(--shadow); text-align: center; }
-.attrib { position: fixed; z-index: 4; right: calc(var(--safe-r) + 10px); top: calc(var(--safe-t) + 296px); font-size: 10.5px; color: #fff; text-shadow: 0 0 3px rgba(0,0,0,.9); pointer-events: none; writing-mode: vertical-rl; }
+.attrib { position: fixed; z-index: 4; left: calc(var(--safe-l) + 12px); right: calc(var(--safe-r) + 12px); bottom: calc(var(--safe-b) + 90px); font-size: 10.5px; color: #fff; text-shadow: 0 0 3px rgba(0,0,0,.9); pointer-events: none; text-align: left; }
 .scale { position: fixed; z-index: 4; left: calc(var(--safe-l) + 12px); top: calc(var(--safe-t) + 68px); font: 500 11px var(--font-num); color: #fff; text-shadow: 0 0 3px rgba(0,0,0,.9); pointer-events: none; }
 .scale i { display: block; height: 6px; border: 2px solid #fff; border-top: 0; margin-top: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.6); }
 
@@ -167,7 +170,7 @@ table.vt th:first-child, table.vt td:first-child { text-align: center; }
   .sheet-title, .sheet-sub { text-align: left; }
   .map-tools { right: auto; left: calc(var(--safe-l) + 10px); top: auto; bottom: calc(var(--safe-b) + 40px); }
   .toast { bottom: calc(var(--safe-b) + 24px); }
-  .attrib { writing-mode: horizontal-tb; top: auto; bottom: calc(var(--safe-b) + 6px); right: calc(var(--safe-r) + 380px); }
+  .attrib { left: calc(var(--safe-l) + 64px); bottom: calc(var(--safe-b) + 30px); right: calc(var(--safe-r) + 380px); }
   .scale { top: auto; bottom: calc(var(--safe-b) + 12px); left: calc(var(--safe-l) + 64px); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

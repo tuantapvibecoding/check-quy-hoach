@@ -94,9 +94,10 @@
 
     <section class="section">
       <h3>Hiển thị</h3>
-      <div class="seg" role="group" aria-label="Ảnh nền">
-        <button id="bmSat" aria-pressed="true">Vệ tinh</button>
-        <button id="bmStreet" aria-pressed="false">Bản đồ đường</button>
+      <div class="seg seg3" id="bmSeg" role="group" aria-label="Ảnh nền">
+        <button data-bm="gsat" aria-pressed="false">Google<br>vệ tinh</button>
+        <button data-bm="groad" aria-pressed="false">Google<br>bản đồ</button>
+        <button data-bm="sat" aria-pressed="false">Esri<br>vệ tinh</button>
       </div>
       <div class="checks">
         <label><input type="checkbox" id="lyFill" checked> Mảng màu</label>
@@ -109,6 +110,17 @@
         <input type="range" id="opacity" min="10" max="100" value="85">
         <output id="opacityOut" class="meta">85%</output>
       </div>
+    </section>
+
+    <section class="section" id="gSec">
+      <h3>Bản đồ Google</h3>
+      <p class="hint">Dùng Google Maps cần API key của riêng bạn (miễn phí 100 000 ô ảnh/tháng). Key chỉ lưu trên máy này, không đưa lên GitHub.</p>
+      <form id="gForm" class="key-row" novalidate autocomplete="off">
+        <input class="num-in" id="gKey" placeholder="AIza…" aria-label="Google Maps API key" spellcheck="false" autocapitalize="off">
+        <button class="btn primary" type="submit">Lưu</button>
+        <button class="btn" type="button" id="gClear" hidden>Xóa</button>
+      </form>
+      <p class="hint" id="gStatus"></p>
     </section>
 
     <section class="section">

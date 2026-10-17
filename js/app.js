@@ -4,7 +4,9 @@
 const APP_VERSION = self.APP_VERSION || '0.0.0';
 const TILE = 256, MAX_Z = 21.5, MIN_Z = 3, R_EARTH = 6378137;
 const BASEMAPS = {
-  sat: { maxZ: 18, url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  gsat: { google: 'satellite', maxZ: 21, url: null, fg: '#f6f3ea', halo: 'rgba(0,0,0,.85)', text: '#ffffff', name: 'Google vệ tinh' },
+  groad: { google: 'roadmap', maxZ: 21, url: null, fg: '#23302a', halo: 'rgba(255,255,255,.9)', text: '#1b2420', name: 'Google bản đồ' },
+  sat: { maxZ: 18, name: 'Esri vệ tinh', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
          labels: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
          fg: '#f6f3ea', halo: 'rgba(0,0,0,.85)', text: '#ffffff', attrib: 'Ảnh nền © Esri, Maxar, Earthstar Geographics' },
   street: { maxZ: 19, url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
@@ -17,7 +19,8 @@ let W = 0, H = 0, DPR = 1;
 // ---------- state ----------
 const layers = [];
 let activeId = null, selectedParcelLayer = null;
-let basemap = 'sat', opacity = 0.85, moveMode = false, tapPoint = null;
+let mapReady = false;   // no tile requests until the first view is positioned (Google tiles are metered)
+let basemap = 'gsat', opacity = 0.85, moveMode = false, tapPoint = null;
 const show = { fill: true, line: true, tree: true, text: true };
 const view = { x: 0, y: 0, z: 15 };
 let gps = null, gpsWatch = null, gpsMode = 'off', compassHeading = null, wakeLock = null, gpsInside = undefined;
@@ -159,9 +162,10 @@ function render() {
   }
   const bm = BASEMAPS[basemap];
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (bm.google && mapReady) googleAttribution();
   ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#ddd';
   ctx.fillRect(0, 0, W, H);
-  drawTileLayer(bm.url, bm.maxZ);
+  if (bm.url && mapReady) drawTileLayer(bm.url, bm.maxZ);
 
   const mats = new Map();
   for (const L of layers) {
@@ -194,7 +198,7 @@ function render() {
     ctx.restore();
   }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (basemap === 'sat' && view.z < 17.5) drawTileLayer(bm.labels, 18);
+  if (bm.labels && mapReady && view.z < 17.5) drawTileLayer(bm.labels, 18);
   if (show.text) drawLabels(mats, bm);
   if (moveMode) { const L = layerById(activeId); if (L && mats.get(L.id)) { const [cx, cy] = apply(mats.get(L.id), 0, 0); drawCross(cx, cy); } }
   if (gps) drawGps();
@@ -532,13 +536,82 @@ $('layerList').addEventListener('click', e => {
 $('opacity').addEventListener('input', e => { opacity = e.target.value / 100; $('opacityOut').textContent = e.target.value + '%'; schedule(); });
 [['lyFill', 'fill'], ['lyLine', 'line'], ['lyTree', 'tree'], ['lyText', 'text']].forEach(([id, k]) =>
   $(id).addEventListener('change', e => { show[k] = e.target.checked; schedule(); }));
-function setBasemap(b) {
-  basemap = b; store.set('basemap', b);
-  $('bmSat').setAttribute('aria-pressed', String(b === 'sat')); $('bmStreet').setAttribute('aria-pressed', String(b === 'street'));
-  $('attrib').textContent = BASEMAPS[b].attrib; schedule();
+// ---------- basemaps (Google Map Tiles API with the user's own key; Esri as fallback) ----------
+const GKEY = 'gmaps-key', GSESS = 'gmaps-session:';
+const googleKey = () => store.get(GKEY) || '';
+async function googleSession(type, force = false) {
+  const key = googleKey(); if (!key) throw Object.assign(new Error('nokey'), { code: 'nokey' });
+  const cached = store.get(GSESS + type);
+  if (!force && cached && cached.key === key && cached.expiry * 1000 > Date.now() + 3600e3) return cached.session;
+  const body = { mapType: type, language: 'vi-VN', region: 'VN', scale: 'scaleFactor2x', highDpi: true };
+  if (type === 'satellite') body.layerTypes = ['layerRoadmap'];          // hybrid: roads + place names on imagery
+  const res = await fetch('https://tile.googleapis.com/v1/createSession?key=' + encodeURIComponent(key), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.session) { const err = new Error((j.error && j.error.message) || ('HTTP ' + res.status)); err.code = 'api'; throw err; }
+  store.set(GSESS + type, { key, session: j.session, expiry: +j.expiry });
+  return j.session;
 }
-$('bmSat').addEventListener('click', () => setBasemap('sat'));
-$('bmStreet').addEventListener('click', () => setBasemap('street'));
+let gAttrTimer = 0, gAttrKey = '';
+function googleAttribution() {             // copyright text for the current viewport, as Google requires
+  const bm = BASEMAPS[basemap]; if (!bm.google || !bm.session) return;
+  const [la1, lo1] = unproject(...toWorld(0, H)), [la2, lo2] = unproject(...toWorld(W, 0));
+  const z = Math.max(0, Math.min(bm.maxZ, Math.round(view.z)));
+  const k = [basemap, z, la1.toFixed(3), lo1.toFixed(3)].join('|');
+  if (k === gAttrKey) return;
+  clearTimeout(gAttrTimer);
+  gAttrTimer = setTimeout(async () => {
+    gAttrKey = k;
+    try {
+      const u = `https://tile.googleapis.com/tile/v1/viewport?session=${bm.session}&key=${encodeURIComponent(googleKey())}&zoom=${z}&north=${la2}&south=${la1}&east=${lo2}&west=${lo1}`;
+      const j = await (await fetch(u)).json();
+      $('attrib').textContent = 'Google Maps' + (j.copyright ? ' · ' + j.copyright : '');
+    } catch (e) {}
+  }, 700);
+}
+async function setBasemap(b, quiet = false) {
+  const bm = BASEMAPS[b]; if (!bm) return;
+  if (bm.google) {
+    if (!googleKey()) {
+      if (!quiet) { toast('Cần nhập Google Maps API key ở mục "Bản đồ Google"', 3500); setSheet(true); $('gKey').focus(); }
+      if (basemap === b || !BASEMAPS[basemap] || BASEMAPS[basemap].google) b = 'sat';
+      return setBasemap(b === 'gsat' || b === 'groad' ? 'sat' : b, true);
+    }
+    try {
+      bm.session = await googleSession(bm.google);
+      bm.url = `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${bm.session}&key=${encodeURIComponent(googleKey())}`;
+    } catch (e) {
+      $('gStatus').textContent = 'Google từ chối: ' + e.message + '. Đang dùng Esri.';
+      if (!quiet) toast('Không mở được bản đồ Google, tạm dùng Esri', 3500);
+      return setBasemap('sat', true);
+    }
+    $('attrib').textContent = 'Google Maps'; gAttrKey = '';
+  } else {
+    $('attrib').textContent = bm.attrib;
+  }
+  basemap = b; store.set('basemap', b);
+  document.querySelectorAll('#bmSeg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.bm === b)));
+  schedule();
+}
+$('bmSeg').addEventListener('click', e => { const b = e.target.closest('[data-bm]'); if (b) setBasemap(b.dataset.bm); });
+function renderKeyState() {
+  const k = googleKey();
+  $('gKey').value = k ? k.slice(0, 6) + '…' + k.slice(-4) : '';
+  $('gKey').dataset.masked = k ? '1' : '';
+  $('gStatus').textContent = k ? 'Đã lưu key trên máy này.' : 'Chưa có key: đang dùng ảnh vệ tinh Esri.';
+  $('gClear').hidden = !k;
+}
+$('gKey').addEventListener('focus', e => { if (e.target.dataset.masked) { e.target.value = ''; e.target.dataset.masked = ''; } });
+$('gForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const k = $('gKey').value.trim();
+  if (!/^AIza[0-9A-Za-z_\-]{30,}$/.test(k)) { $('gStatus').textContent = 'Key Google thường bắt đầu bằng "AIza" và dài khoảng 39 ký tự. Kiểm tra lại.'; return; }
+  $('gStatus').textContent = 'Đang kiểm tra key…';
+  store.set(GKEY, k);
+  try { await googleSession('satellite', true); renderKeyState(); $('gStatus').textContent = 'Key hoạt động. Đã chuyển sang Google vệ tinh.'; setBasemap('gsat'); }
+  catch (err) { $('gStatus').textContent = 'Key chưa dùng được: ' + err.message; }
+});
+$('gClear').addEventListener('click', () => { try { localStorage.removeItem(GKEY); } catch (e) {} renderKeyState(); setBasemap('sat', true); });
 $('zoomIn').addEventListener('click', () => zoomAt(W / 2, H / 2, 1));
 $('zoomOut').addEventListener('click', () => zoomAt(W / 2, H / 2, -1));
 // ---------- live GPS: off -> follow (map tracks you) -> free (you panned away) ----------
@@ -687,7 +760,8 @@ async function boot() {
   renderVersion();
   resize();
   setSheet(window.innerWidth >= 760);
-  const bm = store.get('basemap'); if (bm && BASEMAPS[bm]) setBasemap(bm);
+  renderKeyState();
+  const bm = store.get('basemap'); setBasemap(bm && BASEMAPS[bm] ? bm : 'gsat', true);
   try {
     const cat = await (await fetch('data/catalog.json', { cache: 'no-cache' })).json();
     for (const meta of cat.layers) {
@@ -698,6 +772,7 @@ async function boot() {
   buildIndex();
   renderLayerList();
   if (layers.length) selectLayer(layers[0].id, { fit: true });
+  mapReady = true; schedule();
   setTimeout(() => { if (tileErrors > 4 && !tileOk) toast('Không tải được ảnh nền · kiểm tra kết nối mạng', 4000); }, 7000);
   setTimeout(() => checkUpdate(), 2500);
 }
