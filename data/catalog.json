@@ -1,0 +1,24 @@
+{
+ "version": 1,
+ "layers": [
+  {
+   "id": "thua-115-68",
+   "title": "Thửa đất · hồ sơ 115-68",
+   "kind": "parcel",
+   "file": "data/thua-115-68.json",
+   "note": "Trích lục bản đồ địa chính (DGN V8), VN-2000 KT 108°30′"
+  },
+  {
+   "id": "trang-trai-chu-puh",
+   "title": "Mặt bằng trang trại Chư Pưh",
+   "kind": "plan",
+   "file": "data/trang-trai-chu-puh.json",
+   "note": "Bản vẽ thiết kế 1:1000 (DXF), tọa độ cục bộ — cần căn chỉnh tay",
+   "placeholder": {
+    "lat": 13.54667,
+    "lon": 108.09972,
+    "rot": 0
+   }
+  }
+ ]
+}

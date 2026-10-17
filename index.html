@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Check Quy Hoạch</title>
+<meta name="description" content="Kiểm tra quy hoạch, thửa đất trên nền ảnh vệ tinh — VN-2000 Gia Lai">
+<meta name="theme-color" content="#0f7a5c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Quy Hoạch">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<canvas id="map" aria-label="Bản đồ"></canvas>
+
+<header class="topbar">
+  <form class="search card" id="searchForm" role="search" autocomplete="off">
+    <span class="search-ico" aria-hidden="true">⌕</span>
+    <input id="q" type="search" enterkeyhint="search" placeholder="Tìm số thửa, tên lớp…" aria-label="Tìm số thửa hoặc tên lớp">
+    <button type="button" class="icon-btn" id="clearQ" aria-label="Xóa tìm kiếm" hidden>×</button>
+  </form>
+  <ul class="results card" id="results" hidden></ul>
+</header>
+
+<div class="map-tools">
+  <button class="btn tool" id="locate" aria-label="Vị trí của tôi" title="Vị trí của tôi">◎</button>
+  <button class="btn tool" id="zoomIn" aria-label="Phóng to">+</button>
+  <button class="btn tool" id="zoomOut" aria-label="Thu nhỏ">−</button>
+</div>
+
+<aside class="sheet card" id="sheet">
+  <button class="sheet-grip" id="sheetGrip" aria-expanded="false" aria-controls="sheetBody">
+    <span class="grip-bar" aria-hidden="true"></span>
+    <span class="sheet-title" id="sheetTitle">Lớp dữ liệu</span>
+    <span class="sheet-sub" id="sheetSub">2 lớp · chạm để mở</span>
+  </button>
+  <div class="sheet-body" id="sheetBody">
+
+    <section class="section">
+      <h3>Lớp dữ liệu</h3>
+      <ul class="layers" id="layerList"></ul>
+    </section>
+
+    <section class="section" id="parcelSec" hidden>
+      <h3 id="parcelHead">Thông tin thửa đất</h3>
+      <div class="facts">
+        <div class="fact"><div class="k">Diện tích (tính từ tọa độ)</div><div class="v" id="pArea">–</div></div>
+        <div class="fact"><div class="k">Chu vi</div><div class="v" id="pPerim">–</div></div>
+      </div>
+      <p class="hint" id="pNo"></p>
+      <div class="verify" id="pVerify"></div>
+      <div class="vt-wrap">
+        <table class="vt" id="pTable">
+          <thead><tr><th>Đỉnh</th><th>X (m)</th><th>Y (m)</th><th>Cạnh (m)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <h3>Giáp ranh</h3>
+      <div class="tags" id="pNeigh"></div>
+    </section>
+
+    <section class="section" id="alignSec" hidden>
+      <h3>Căn chỉnh: <span id="alignName"></span></h3>
+      <p class="hint">Bản vẽ này dùng tọa độ cục bộ. Bật "Di chuyển", kéo cho trùng công trình trên ảnh vệ tinh, xoay cho khớp (hai ngón tay để xoay).</p>
+      <div class="btn-row">
+        <button class="btn toggle" id="moveMode" aria-pressed="false">Di chuyển bản vẽ</button>
+        <button class="btn" id="resetPos">Đặt lại</button>
+      </div>
+      <div class="row">
+        <label for="rot">Xoay</label>
+        <input type="range" id="rot" min="-180" max="180" step="0.5" value="0">
+        <input class="num-in" id="rotNum" type="number" min="-180" max="180" step="0.1" value="0" aria-label="Góc xoay (độ)">
+      </div>
+      <form id="gotoForm" class="form-grid" novalidate>
+        <label>X tâm (Bắc, m)<input class="num-in" id="inX" inputmode="decimal" placeholder="1498190,05"></label>
+        <label>Y tâm (Đông, m)<input class="num-in" id="inY" inputmode="decimal" placeholder="456482,62"></label>
+        <button class="btn primary" type="submit">Đặt tâm theo VN-2000</button>
+      </form>
+      <p class="err" id="gotoErr" hidden></p>
+    </section>
+
+    <section class="section">
+      <h3>Hiển thị</h3>
+      <div class="seg" role="group" aria-label="Ảnh nền">
+        <button id="bmSat" aria-pressed="true">Vệ tinh</button>
+        <button id="bmStreet" aria-pressed="false">Bản đồ đường</button>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="lyFill" checked> Mảng màu</label>
+        <label><input type="checkbox" id="lyLine" checked> Nét vẽ</label>
+        <label><input type="checkbox" id="lyText" checked> Nhãn chữ</label>
+        <label><input type="checkbox" id="lyTree" checked> Cây xanh</label>
+      </div>
+      <div class="row">
+        <label for="opacity">Độ đậm</label>
+        <input type="range" id="opacity" min="10" max="100" value="85">
+        <output id="opacityOut" class="meta">85%</output>
+      </div>
+    </section>
+
+    <section class="section">
+      <h3>Tọa độ điểm chạm</h3>
+      <dl class="coords">
+        <dt>Vĩ độ, kinh độ</dt><dd id="tWgs">Chạm lên bản đồ</dd>
+        <dt>VN-2000 X</dt><dd id="tX">–</dd>
+        <dt>VN-2000 Y</dt><dd id="tY">–</dd>
+      </dl>
+      <p class="hint">Hệ VN-2000, kinh tuyến trục 108°30′, múi 3° (Gia Lai).</p>
+    </section>
+
+    <p class="foot">Check Quy Hoạch · bản demo <span id="ver"></span></p>
+  </div>
+</aside>
+
+<div class="scale" id="scale"><span id="scaleTxt">100 m</span><i id="scaleBar" style="width:80px"></i></div>
+<div class="attrib" id="attrib">Ảnh nền © Esri, Maxar, Earthstar Geographics</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="js/vn2000.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

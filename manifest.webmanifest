@@ -1,0 +1,17 @@
+{
+  "name": "Check Quy Hoạch · Gia Lai",
+  "short_name": "Quy Hoạch",
+  "description": "Kiểm tra quy hoạch, thửa đất trên nền ảnh vệ tinh — VN-2000 Gia Lai",
+  "lang": "vi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#18201c",
+  "theme_color": "#0f7a5c",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

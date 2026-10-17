@@ -1,0 +1,9 @@
+# Source drawings stay private: never commit raw survey / design files
+*.dgn
+*.DGN
+*.dxf
+*.DXF
+*.dwg
+raw/
+__pycache__/
+.DS_Store
