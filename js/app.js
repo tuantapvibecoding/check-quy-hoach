@@ -120,10 +120,58 @@ function pointInRing(x, y, r) {
 // ---------- tiles ----------
 const tileCache = new Map();
 let tileErrors = 0, tileOk = 0;
+// ---------- Google tile usage meter (counted on this device; Google's console has the official number) ----------
+const GUSE = 'gmaps-usage', FREE_TILES = 100000, USD_PER_1000 = 0.6, VND_PER_USD = 26000;
+const monthKey = () => new Date().toISOString().slice(0, 7), dayKey = () => new Date().toISOString().slice(0, 10);
+let gUse = (() => { const u = store.get(GUSE); return u && u.month === monthKey() ? u : { month: monthKey(), total: 0, days: {} }; })();
+let gUseDirty = 0, gLimitHit = false;
+const dayLimit = () => { const v = store.get('gmaps-daylimit'); return v === null || v === undefined ? 3000 : v; };
+function saveUse() { if (gUseDirty) { store.set(GUSE, gUse); gUseDirty = 0; } }
+function countGoogleTile() {
+  if (gUse.month !== monthKey()) gUse = { month: monthKey(), total: 0, days: {} };
+  gUse.total++; gUse.days[dayKey()] = (gUse.days[dayKey()] || 0) + 1;
+  if (++gUseDirty >= 10) saveUse();
+  renderUsageSoon();
+}
+function googleAllowed() {
+  const lim = dayLimit(), today = gUse.month === monthKey() ? (gUse.days[dayKey()] || 0) : 0;
+  if (lim > 0 && today >= lim) {
+    if (!gLimitHit) { gLimitHit = true; toast(`Đã dùng ${fmt(today, 0)} ô Google hôm nay (giới hạn ${fmt(lim, 0)}) · chuyển sang Esri`, 4500); setTimeout(() => setBasemap('sat', true), 0); }
+    return false;
+  }
+  return true;
+}
+let usageTimer = 0;
+function renderUsageSoon() { if (!usageTimer) usageTimer = setTimeout(() => { usageTimer = 0; saveUse(); renderUsage(); }, 400); }
+function renderUsage() {
+  if (gUse.month !== monthKey()) gUse = { month: monthKey(), total: 0, days: {} };
+  const t = gUse.total, today = gUse.days[dayKey()] || 0, pct = t / FREE_TILES * 100;
+  const over = Math.max(0, t - FREE_TILES), usd = over / 1000 * USD_PER_1000;
+  const [y, m] = gUse.month.split('-');
+  $('gUseMonth').textContent = fmt(t, 0);
+  $('gUseLabel').textContent = `/ 100 000 ô miễn phí · tháng ${+m}/${y}`;
+  $('gUseBar').value = Math.min(t, FREE_TILES);
+  $('gUseBar').classList.toggle('warn', pct >= 80);
+  $('gUseHint').textContent = `Hôm nay: ${fmt(today, 0)} ô · đã dùng ${pct < 0.1 && t > 0 ? '<0,1' : fmt(pct, 1)}% mức miễn phí · ` +
+    (usd > 0 ? `ước tính phải trả ${fmt(usd, 2)} USD (~${fmt(Math.round(usd * VND_PER_USD / 1000) * 1000, 0)} đ)` : 'chưa mất phí');
+  const lim = dayLimit();
+  if (document.activeElement !== $('gDayLimit')) $('gDayLimit').value = lim || '';
+}
+window.addEventListener('pagehide', saveUse);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveUse(); });
+$('gDayLimit').addEventListener('change', e => {
+  const v = Math.max(0, Math.round(parseFloat(String(e.target.value).replace(/\s/g, '')) || 0));
+  store.set('gmaps-daylimit', v); gLimitHit = false; renderUsage();
+  toast(v ? `Giới hạn ${fmt(v, 0)} ô Google mỗi ngày trên máy này` : 'Đã bỏ giới hạn mỗi ngày', 2500);
+});
+
 function getTile(tpl, z, x, y, request) {
   const key = tpl + '|' + z + '|' + x + '|' + y;
   let t = tileCache.get(key);
+  const isGoogle = tpl.includes('tile.googleapis.com/v1/2dtiles');
+  if (!t && request && isGoogle && !googleAllowed()) return undefined;
   if (!t && request) {
+    if (isGoogle) countGoogleTile();
     const img = new Image();
     t = { img, ok: false };
     img.onload = () => { t.ok = true; tileOk++; schedule(); };
@@ -735,7 +783,7 @@ async function setBasemap(b, quiet = false) {
   document.querySelectorAll('#bmSeg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.bm === b)));
   schedule();
 }
-$('bmSeg').addEventListener('click', e => { const b = e.target.closest('[data-bm]'); if (b) setBasemap(b.dataset.bm); });
+$('bmSeg').addEventListener('click', e => { const b = e.target.closest('[data-bm]'); if (!b) return; if (BASEMAPS[b.dataset.bm].google && !googleAllowed()) return; setBasemap(b.dataset.bm); });
 function renderKeyState() {
   const k = googleKey();
   $('gKey').value = k ? k.slice(0, 6) + '…' + k.slice(-4) : '';
@@ -903,6 +951,7 @@ async function boot() {
   resize();
   setSheet(window.innerWidth >= 760);
   renderKeyState();
+  renderUsage();
   osmInit();
   const bm = store.get('basemap'); setBasemap(bm && BASEMAPS[bm] ? bm : 'gsat', true);
   try {

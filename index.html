@@ -130,6 +130,14 @@
         <button class="btn" type="button" id="gClear" hidden>Xóa</button>
       </form>
       <p class="hint" id="gStatus"></p>
+      <div class="usage">
+        <div class="usage-top"><b id="gUseMonth">0</b> <span id="gUseLabel">/ 100 000 ô miễn phí</span></div>
+        <progress id="gUseBar" max="100000" value="0"></progress>
+        <p class="hint" id="gUseHint"></p>
+        <label class="limit-row" for="gDayLimit">Giới hạn mỗi ngày
+          <input class="num-in" id="gDayLimit" type="number" inputmode="numeric" min="0" step="500" placeholder="3000"> ô</label>
+        <p class="hint">Số đếm tính trên máy này (có thể cao hơn thực tế một chút). Số chính xác xem ở Google Cloud Console › Map Tiles API › Metrics. Để 0 nếu không muốn giới hạn.</p>
+      </div>
     </section>
 
     <section class="section">

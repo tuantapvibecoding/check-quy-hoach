@@ -1,7 +1,12 @@
 /* Single source of truth for the app version. Bump with: python3 tools/bump_version.py <x.y.z> "<ghi chú>" */
-self.APP_VERSION = '0.5.0';
+self.APP_VERSION = '0.6.0';
 self.APP_BUILD_DATE = '2026-10-17';
 self.CHANGELOG = [
+  { v: '0.6.0', d: '2026-10-17', items: [
+    "Bộ đếm số ô ảnh Google đã dùng trong tháng, so với mức miễn phí 100 000 ô",
+    "Ước tính chi phí nếu vượt mức miễn phí",
+    "Giới hạn số ô Google mỗi ngày (mặc định 3 000): quá giới hạn thì tự chuyển sang Esri",
+  ] },
   { v: '0.5.0', d: '2026-10-17', items: [
     "Bản đồ offline toàn tỉnh Gia Lai cũ (OpenStreetMap, ~19 MB): đường, sông hồ, ranh giới, địa danh",
     "Mất mạng thì tự chuyển sang bản đồ offline, có mạng lại thì quay về Google",

@@ -1,6 +1,6 @@
 /* Service worker: app shell + data cached for offline use. Third-party map tiles are not cached. */
 const OSM_CACHE = 'cqh-osm-v1';   // offline basemap survives app updates
-const VERSION = 'cqh-v0.5.0';
+const VERSION = 'cqh-v0.6.0';
 const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/vn2000.js', 'js/version.js', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'data/catalog.json', 'data/thua-115-68.json', 'data/trang-trai-chu-puh.json'];

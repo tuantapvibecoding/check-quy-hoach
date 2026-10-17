@@ -146,6 +146,16 @@ table.vt th:first-child, table.vt td:first-child { text-align: center; }
 body.light-map .attrib, body.light-map .scale { color: #39403a; text-shadow: 0 0 3px rgba(255,255,255,.95); }
 body.light-map .scale i { border-color: #39403a; box-shadow: none; }
 
+/* google usage meter */
+.usage { display: flex; flex-direction: column; gap: 6px; background: var(--panel-2); border-radius: 10px; padding: 10px 11px; }
+.usage-top { font-variant-numeric: tabular-nums; }
+.usage-top b { font: 600 20px var(--font-num); }
+.usage-top span { color: var(--muted); font-size: 12.5px; }
+.usage progress { height: 8px; }
+.usage progress.warn { accent-color: #d9822b; }
+.limit-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+.limit-row .num-in { width: 90px; }
+
 /* version */
 .ver-pill { position: absolute; top: 9px; right: 12px; z-index: 1; font: 600 11px var(--font-num); color: var(--muted); background: var(--panel-2);
   padding: 3px 7px; border-radius: 999px; pointer-events: none; font-variant-numeric: tabular-nums; }
